@@ -32,7 +32,7 @@
 ## 🚀 설치 방법 (Installation)
 
 1. 최신 버전의 설치파일(APK)을 [GitHub Releases](https://github.com/chadolkr/KakaoAdBlocker/releases) 탭에서 다운로드합니다.
-2. 기기에서 다운로드한 `KakaoAdBlocker_v1.2.17-release.apk` 파일을 실행하여 설치합니다.
+2. 기기에서 다운로드한 `KakaoAdBlocker_v1.2.18-release.apk` 파일을 실행하여 설치합니다.
 3. 앱을 실행하고 화면의 안내에 따라 **"알림 접근 권한 설정하기"** 버튼을 클릭하여 권한을 허용해 줍니다.
 4. **"실시간 광고 차단"** 스위치를 활성화하면 실시간 모니터링이 시작됩니다.
 
