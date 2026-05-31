@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">카톡광고차단</string>
+    <string name="blocker_service_label">카카오톡 광고 차단기</string>
+    <string name="app_title">카카오톡 광고 차단기</string>
+    <string name="app_subtitle">카카오톡 \'(광고)\' 메세지 자동 필터링</string>
+    <string name="delete_all_desc">전체 삭제</string>
+    <string name="title_service_enabled">광고 차단 서비스 작동 중</string>
+    <string name="title_service_disabled">서비스 비활성화됨</string>
+    <string name="title_service_paused">광고 차단 서비스 일시 정지됨</string>
+    <string name="desc_service_enabled">실시간으로 광고 알림을 차단하고 있습니다</string>
+    <string name="desc_service_disabled">알림 접근 권한 허용이 필요합니다</string>
+    <string name="desc_service_paused">스위치를 켜면 광고 차단이 작동합니다</string>
+    <string name="button_grant_permission">알림 접근 권한 설정하기</string>
+    <string name="stats_title">총 차단 횟수</string>
+    <string name="stats_count_format">%1$d건</string>
+    <string name="badge_monitoring">실시간 모니터링</string>
+    <string name="badge_waiting">차단 대기 중</string>
+    <string name="history_title">차단 내역 (%1$d)</string>
+    <string name="empty_logs_title">차단된 광고 메세지가 없습니다</string>
+    <string name="empty_logs_desc">조건에 부합하는 카카오톡 메세지가 도착하면\n자동으로 차단 내역에 추가됩니다.</string>
+    <string name="version_footer_format">버전 v%1$s | 개발자 차승현 (chadolkr@gmail.com)</string>
+    <string name="error_format">에러가 발생했습니다: %1$s</string>
+    <string name="delete_desc">삭제</string>
+    <string name="privacy_policy_title">개인정보 처리방침</string>
+    <string name="privacy_policy_url">https://github.com/chadolkr/KakaoAdBlocker/blob/master/PRIVACY.md</string>
+</resources>

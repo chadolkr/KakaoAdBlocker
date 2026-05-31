@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">카톡광고차단</string>
+    <string name="blocker_service_label">KakaoTalk Ad Blocker</string>
+    <string name="app_title">KakaoTalk Ad Blocker</string>
+    <string name="app_subtitle">Automatically filter KakaoTalk \'(광고)\' messages</string>
+    <string name="delete_all_desc">Delete All</string>
+    <string name="title_service_enabled">Ad Blocker Service Active</string>
+    <string name="title_service_disabled">Service Disabled</string>
+    <string name="title_service_paused">Ad Blocker Service Paused</string>
+    <string name="desc_service_enabled">Real-time blocking is active</string>
+    <string name="desc_service_disabled">Notification access permission is required</string>
+    <string name="desc_service_paused">Turn on the switch to activate ad blocking</string>
+    <string name="button_grant_permission">Grant Notification Access</string>
+    <string name="stats_title">Total Blocked Notifications</string>
+    <string name="stats_count_format">%1$d items</string>
+    <string name="badge_monitoring">Live Monitoring</string>
+    <string name="badge_waiting">Waiting to Block</string>
+    <string name="history_title">Blocked History (%1$d)</string>
+    <string name="empty_logs_title">No blocked ad messages yet</string>
+    <string name="empty_logs_desc">When an ad message arrives,\nit will be blocked and logged here.</string>
+    <string name="version_footer_format">Version v%1$s | Dev SeungHyun Cha (chadolkr@gmail.com)</string>
+    <string name="error_format">An error occurred: %1$s</string>
+    <string name="delete_desc">Delete</string>
+    <string name="privacy_policy_title">Privacy Policy</string>
+    <string name="privacy_policy_url">https://github.com/chadolkr/KakaoAdBlocker/blob/master/PRIVACY.md</string>
+</resources>
