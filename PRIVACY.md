@@ -24,7 +24,7 @@
 
 ## 6. 개인정보 보호책임자 연락처 (Contact Information)
 개인정보 보호방침과 관련된 문의사항은 아래 연락처로 연락해 주시기 바랍니다.
-- **개발자**: 차승현 (SeungHyun Cha)
+- **개발자**: David CHA
 - **이메일**: [chadolkr@gmail.com](mailto:chadolkr@gmail.com)
 
 ---
