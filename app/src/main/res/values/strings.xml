@@ -18,7 +18,7 @@
     <string name="history_title">Blocked History (%1$d)</string>
     <string name="empty_logs_title">No blocked ad messages yet</string>
     <string name="empty_logs_desc">When an ad message arrives,\nit will be blocked and logged here.</string>
-    <string name="version_footer_format">Version v%1$s | Dev David CHA (chadolkr@gmail.com)</string>
+    <string name="version_footer_format">Version v%1$s | Dev David CHA (balance.david.cha@gmail.com)</string>
     <string name="error_format">An error occurred: %1$s</string>
     <string name="delete_desc">Delete</string>
     <string name="privacy_policy_title">Privacy Policy</string>
