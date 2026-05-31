@@ -22,5 +22,5 @@
     <string name="error_format">에러가 발생했습니다: %1$s</string>
     <string name="delete_desc">삭제</string>
     <string name="privacy_policy_title">개인정보 처리방침</string>
-    <string name="privacy_policy_url">https://github.com/chadolkr/KakaoAdBlocker/blob/master/PRIVACY.md</string>
+    <string name="privacy_policy_url">https://github.com/chadolkr/KakaoAdBlocker/blob/main/PRIVACY.md</string>
 </resources>

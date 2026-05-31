@@ -22,5 +22,5 @@
     <string name="error_format">An error occurred: %1$s</string>
     <string name="delete_desc">Delete</string>
     <string name="privacy_policy_title">Privacy Policy</string>
-    <string name="privacy_policy_url">https://github.com/chadolkr/KakaoAdBlocker/blob/master/PRIVACY.md</string>
+    <string name="privacy_policy_url">https://github.com/chadolkr/KakaoAdBlocker/blob/main/PRIVACY.md</string>
 </resources>
