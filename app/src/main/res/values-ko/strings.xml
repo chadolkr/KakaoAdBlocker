@@ -23,4 +23,17 @@
     <string name="delete_desc">삭제</string>
     <string name="privacy_policy_title">개인정보 처리방침</string>
     <string name="privacy_policy_url">https://github.com/chadolkr/KakaoAdBlocker/blob/main/PRIVACY.md</string>
+    <string name="cleanup_service_label">카톡 광고 채팅방 자동 정리</string>
+    <string name="cleanup_service_description">광고 알림이 차단되면 카카오톡에서 해당 채널 채팅방을 열어 채널을 차단하고 채팅방을 나가 광고 메세지를 삭제합니다. 카카오톡 화면만 읽고 조작하며, 화면 내용을 수집하거나 전송하지 않습니다.</string>
+    <string name="cleanup_title">자동 정리</string>
+    <string name="cleanup_desc_disabled">채널 차단과 광고 채팅방 삭제를 자동으로 하려면 접근성 권한이 필요합니다</string>
+    <string name="cleanup_desc_enabled">광고가 오면 카카오톡이 잠시 열려 채널 채팅방을 정리합니다</string>
+    <string name="button_grant_accessibility">접근성 권한 설정하기</string>
+    <string name="cleanup_auto_block">광고 채널 자동 차단</string>
+    <string name="cleanup_auto_leave">광고 채팅방 나가기 (메세지 삭제)</string>
+    <string name="cleanup_status_pending">정리 대기 중</string>
+    <string name="cleanup_status_done">정리 완료</string>
+    <string name="cleanup_status_partial">나가기 완료 (차단 실패)</string>
+    <string name="cleanup_status_not_channel">채널이 아니라 건너뜀</string>
+    <string name="cleanup_status_failed">정리 실패</string>
 </resources>

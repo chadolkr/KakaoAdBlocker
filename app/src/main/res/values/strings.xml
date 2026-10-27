@@ -23,4 +23,17 @@
     <string name="delete_desc">Delete</string>
     <string name="privacy_policy_title">Privacy Policy</string>
     <string name="privacy_policy_url">https://github.com/chadolkr/KakaoAdBlocker/blob/main/PRIVACY.md</string>
+    <string name="cleanup_service_label">KakaoTalk Ad Chat Cleanup</string>
+    <string name="cleanup_service_description">When an ad notification is blocked, this service opens the channel chat in KakaoTalk, blocks the channel and leaves the chat room so the ad messages are deleted. It only reads and operates KakaoTalk screens and never collects or transmits screen content.</string>
+    <string name="cleanup_title">Auto Cleanup</string>
+    <string name="cleanup_desc_disabled">Accessibility permission is required to block channels and delete ad chats automatically</string>
+    <string name="cleanup_desc_enabled">KakaoTalk opens briefly after an ad arrives to clean up the channel chat</string>
+    <string name="button_grant_accessibility">Grant Accessibility Permission</string>
+    <string name="cleanup_auto_block">Block ad channel</string>
+    <string name="cleanup_auto_leave">Leave ad chat (delete messages)</string>
+    <string name="cleanup_status_pending">Cleanup pending</string>
+    <string name="cleanup_status_done">Cleaned up</string>
+    <string name="cleanup_status_partial">Left chat (block failed)</string>
+    <string name="cleanup_status_not_channel">Skipped: not a channel</string>
+    <string name="cleanup_status_failed">Cleanup failed</string>
 </resources>

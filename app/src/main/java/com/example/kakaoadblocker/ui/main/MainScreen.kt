@@ -35,6 +35,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.kakaoadblocker.data.BlockedNotification
+import com.example.kakaoadblocker.data.CleanupStatus
 import com.example.kakaoadblocker.data.SharedPreferencesBlockLogRepository
 import com.example.kakaoadblocker.theme.KakaoAdBlockerTheme
 import androidx.compose.foundation.Image
@@ -100,6 +101,17 @@ fun MainScreen(
                         context.startActivity(intent)
                     },
                     onToggleBlocking = { enabled -> viewModel.setBlockingEnabled(enabled) },
+                    isAccessibilityEnabled = successState.isAccessibilityEnabled,
+                    isAutoBlockChannelEnabled = successState.isAutoBlockChannelEnabled,
+                    isAutoLeaveChatEnabled = successState.isAutoLeaveChatEnabled,
+                    onOpenAccessibilitySettings = {
+                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(intent)
+                    },
+                    onToggleAutoBlockChannel = { enabled -> viewModel.setAutoBlockChannelEnabled(enabled) },
+                    onToggleAutoLeaveChat = { enabled -> viewModel.setAutoLeaveChatEnabled(enabled) },
                     onRemoveLog = { id -> viewModel.removeLog(id) },
                     onClearAllLogs = { viewModel.clearAllLogs() },
                     modifier = modifier
@@ -133,7 +145,13 @@ internal fun MainContent(
     onToggleBlocking: (Boolean) -> Unit,
     onRemoveLog: (String) -> Unit,
     onClearAllLogs: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isAccessibilityEnabled: Boolean = false,
+    isAutoBlockChannelEnabled: Boolean = false,
+    isAutoLeaveChatEnabled: Boolean = false,
+    onOpenAccessibilitySettings: () -> Unit = {},
+    onToggleAutoBlockChannel: (Boolean) -> Unit = {},
+    onToggleAutoLeaveChat: (Boolean) -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -199,6 +217,18 @@ internal fun MainContent(
             onOpenSettings = onOpenSettings,
             onToggleBlocking = onToggleBlocking
         )
+
+        if (isServiceEnabled) {
+            Spacer(modifier = Modifier.height(12.dp))
+            CleanupCard(
+                isAccessibilityEnabled = isAccessibilityEnabled,
+                isAutoBlockChannelEnabled = isAutoBlockChannelEnabled,
+                isAutoLeaveChatEnabled = isAutoLeaveChatEnabled,
+                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                onToggleAutoBlockChannel = onToggleAutoBlockChannel,
+                onToggleAutoLeaveChat = onToggleAutoLeaveChat
+            )
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -440,6 +470,128 @@ fun StatusCard(
 }
 
 @Composable
+fun CleanupCard(
+    isAccessibilityEnabled: Boolean,
+    isAutoBlockChannelEnabled: Boolean,
+    isAutoLeaveChatEnabled: Boolean,
+    onOpenAccessibilitySettings: () -> Unit,
+    onToggleAutoBlockChannel: (Boolean) -> Unit,
+    onToggleAutoLeaveChat: (Boolean) -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C24)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp)
+        ) {
+            Text(
+                text = stringResource(id = R.string.cleanup_title),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Text(
+                text = if (isAccessibilityEnabled) {
+                    stringResource(id = R.string.cleanup_desc_enabled)
+                } else {
+                    stringResource(id = R.string.cleanup_desc_disabled)
+                },
+                fontSize = 12.sp,
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+
+            if (isAccessibilityEnabled) {
+                CleanupSwitchRow(
+                    label = stringResource(id = R.string.cleanup_auto_block),
+                    checked = isAutoBlockChannelEnabled,
+                    onCheckedChange = onToggleAutoBlockChannel
+                )
+                CleanupSwitchRow(
+                    label = stringResource(id = R.string.cleanup_auto_leave),
+                    checked = isAutoLeaveChatEnabled,
+                    onCheckedChange = onToggleAutoLeaveChat
+                )
+            } else {
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = onOpenAccessibilitySettings,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFEB3B), contentColor = Color.Black),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.button_grant_accessibility),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CleanupSwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = Color(0xFFE0E0E0),
+            modifier = Modifier.weight(1f)
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFFFFEB3B),
+                checkedTrackColor = Color(0xFFFFEB3B).copy(alpha = 0.5f),
+                uncheckedThumbColor = Color.LightGray,
+                uncheckedTrackColor = Color.White.copy(alpha = 0.2f)
+            )
+        )
+    }
+}
+
+@Composable
+private fun CleanupStatusChip(status: CleanupStatus) {
+    val (labelRes, color) = when (status) {
+        CleanupStatus.NONE -> return
+        CleanupStatus.PENDING -> R.string.cleanup_status_pending to Color(0xFFFFEB3B)
+        CleanupStatus.DONE -> R.string.cleanup_status_done to Color(0xFF66BB6A)
+        CleanupStatus.PARTIAL -> R.string.cleanup_status_partial to Color(0xFFFFA726)
+        CleanupStatus.NOT_CHANNEL -> R.string.cleanup_status_not_channel to Color.Gray
+        CleanupStatus.FAILED -> R.string.cleanup_status_failed to Color(0xFFFF5252)
+    }
+    Box(
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .background(color.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = stringResource(id = labelRes),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+    }
+}
+
+@Composable
 fun LogCard(
     log: BlockedNotification,
     onRemove: () -> Unit
@@ -493,6 +645,7 @@ fun LogCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                CleanupStatusChip(status = log.cleanupStatus)
             }
             Spacer(modifier = Modifier.width(12.dp))
             IconButton(
@@ -546,14 +699,17 @@ fun MainScreenPreview() {
             isServiceEnabled = true,
             isBlockingEnabled = true,
             blockedLogs = listOf(
-                BlockedNotification(sender = "쿠팡", text = "(광고) 골드박스 단 하루 특가 상품 확인해보세요!", timestamp = System.currentTimeMillis()),
+                BlockedNotification(sender = "쿠팡", text = "(광고) 골드박스 단 하루 특가 상품 확인해보세요!", timestamp = System.currentTimeMillis(), cleanupStatus = CleanupStatus.DONE),
                 BlockedNotification(sender = "배달의민족", text = "(광고) 오늘 저녁은 치킨 어때요? 5,000원 쿠폰 지급!", timestamp = System.currentTimeMillis() - 600000)
             ),
             totalBlockedCount = 2,
             onOpenSettings = {},
             onToggleBlocking = {},
             onRemoveLog = {},
-            onClearAllLogs = {}
+            onClearAllLogs = {},
+            isAccessibilityEnabled = true,
+            isAutoBlockChannelEnabled = true,
+            isAutoLeaveChatEnabled = true
         )
     }
 }
