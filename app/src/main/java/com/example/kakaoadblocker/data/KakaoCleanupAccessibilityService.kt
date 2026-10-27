@@ -30,7 +30,8 @@ import java.lang.ref.WeakReference
  * (which deletes the ad messages). KakaoTalk has no API for this, so the service finds buttons by their
  * labels. If KakaoTalk changes those labels, update [Labels].
  *
- * Flow: open chat → open drawer menu → verify it is a channel chat → block → leave.
+ * Flow: open chat → verify it is a channel chat → block via the channel notice → leave via the menu.
+ * Labels were taken from KakaoTalk 26.9.1 (Android 17); chat titles and previews live in content descriptions.
  *
  * Scan mode (requested from the app) cleans up ad chats received before the feature was enabled:
  * open the chat list → find a row whose preview is an ad → run the flow above → back to the list top → repeat.
@@ -39,22 +40,25 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
 
     /** UI labels (text or content description) of the KakaoTalk elements this service clicks. */
     private object Labels {
-        val MENU = listOf("메뉴", "채팅방 메뉴", "서랍", "Menu")
-        // Bottom navigation tab of the chat list; only visible outside chat rooms
-        val CHAT_TAB = listOf("채팅", "채팅 탭", "Chats")
-        // Only channel chat rooms show these in the drawer; used to avoid touching friends' chats
-        val CHANNEL_HINTS = listOf("채널", "Channel")
-        val BLOCK = listOf("채널 차단", "차단", "차단하기", "Block channel", "Block")
-        val CONFIRM_BLOCK = listOf("차단", "차단하기", "확인", "Block", "OK")
-        val LEAVE = listOf("채팅방 나가기", "나가기", "Leave chat", "Leave")
-        val CONFIRM_LEAVE = listOf("나가기", "확인", "Leave", "OK")
+        val MENU = listOf("메뉴 더보기", "메뉴", "Menu")
+        // Bottom navigation tab of the chat list ("채팅 탭 3개의 새로운 업데이트"); only visible outside chat rooms
+        val CHAT_TAB = listOf("채팅 탭", "Chats tab")
+        // Only channel chat rooms show these; used to avoid touching friends' chats
+        val CHANNEL_HINTS = listOf("채널을 차단", "채널로 이동", "채널 메뉴", "인증된 채널")
+        // Notice at the top of a channel chat: "...수신을 원하지 않을 경우 여기를 눌러 채널을 차단해주세요."
+        val BLOCK_NOTICE = listOf("채널을 차단")
+        val BLOCK_DIALOG_TITLE = listOf("채널 차단")
+        val CONFIRM_BLOCK = listOf("차단", "Block")
+        val LEAVE = listOf("채팅방 나가기", "Leave chat")
+        val CONFIRM_LEAVE = listOf("나가기", "Leave")
     }
+
+    private enum class Match { EXACT, PREFIX, CONTAINS }
 
     private enum class Step(val timeoutMs: Long) {
         SCAN_OPEN_LIST(8_000),
         SCAN(6_000),
         OPEN_CHAT(8_000),
-        OPEN_MENU(4_000),
         VERIFY_CHANNEL(3_000),
         BLOCK(3_000),
         CONFIRM_BLOCK(3_000),
@@ -71,6 +75,7 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
     private var lastActionAt = 0L
     private var lastClickedBounds: Rect? = null
     private var blockFailed = false
+    private var blockScrolls = 0
     private var autoBlock = false
     private var autoLeave = false
 
@@ -263,40 +268,45 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         when (step) {
             Step.SCAN_OPEN_LIST, Step.SCAN -> Unit
             Step.OPEN_CHAT -> {
-                val inChatRoom = roots.any { it.findByText(current.chatTitle) != null } &&
-                    roots.any { it.findByLabel(Labels.MENU) != null } &&
-                    roots.none { it.findByLabel(Labels.CHAT_TAB) != null }
-                if (inChatRoom) {
-                    enterStep(Step.OPEN_MENU)
-                } else {
-                    // We are on the chat list (fallback path); open the chat room by its title
-                    roots.firstNotNullOfOrNull { it.findByText(current.chatTitle) }?.let { click(it) }
-                }
-            }
-            Step.OPEN_MENU -> {
-                roots.firstNotNullOfOrNull { it.findByLabel(Labels.MENU) }?.let {
-                    click(it)
+                val onChatList = roots.any { it.findByLabel(Labels.CHAT_TAB, Match.PREFIX) != null }
+                if (!onChatList &&
+                    roots.any { it.findByTitle(current.chatTitle) != null } &&
+                    roots.any { it.findByLabel(Labels.MENU) != null }
+                ) {
+                    blockScrolls = 0
                     enterStep(Step.VERIFY_CHANNEL)
+                } else if (onChatList) {
+                    // Fallback path: open the chat room from the list by its title
+                    roots.firstNotNullOfOrNull { it.findByTitle(current.chatTitle) }?.let { click(it) }
                 }
             }
             Step.VERIFY_CHANNEL -> {
-                // Ignore the chat title itself so a friend named e.g. "채널맨" doesn't pass
+                // Ignore the chat title itself so a friend named e.g. "채널 메뉴" doesn't pass
                 val channelHint = roots.firstNotNullOfOrNull { root ->
-                    root.findByLabel(Labels.CHANNEL_HINTS, exact = false, excluding = current.chatTitle)
+                    root.findByLabel(Labels.CHANNEL_HINTS, Match.CONTAINS, excluding = current.chatTitle)
                 }
                 if (channelHint != null) {
                     enterStep(if (autoBlock) Step.BLOCK else Step.LEAVE)
                 }
             }
             Step.BLOCK -> {
-                roots.firstNotNullOfOrNull { it.findByLabel(Labels.BLOCK) }?.let {
-                    click(it)
+                val notice = roots.firstNotNullOfOrNull { it.findByLabel(Labels.BLOCK_NOTICE, Match.CONTAINS) }
+                if (notice != null) {
+                    click(notice)
                     enterStep(Step.CONFIRM_BLOCK)
+                } else if (blockScrolls < MAX_CHAT_SCROLLS && scrollChatLogUp(roots)) {
+                    // The notice sits above the first message; scroll up to reveal it
+                    blockScrolls++
+                    enterStep(Step.BLOCK)
                 }
             }
             Step.CONFIRM_BLOCK -> {
-                roots.firstNotNullOfOrNull { it.findByLabel(Labels.CONFIRM_BLOCK, skipBounds = lastClickedBounds) }?.let {
-                    click(it)
+                val inDialog = roots.any { it.findByLabel(Labels.BLOCK_DIALOG_TITLE) != null }
+                val confirm = roots.firstNotNullOfOrNull {
+                    it.findByLabel(Labels.CONFIRM_BLOCK, skipBounds = lastClickedBounds)
+                }
+                if (inDialog && confirm != null) {
+                    click(confirm)
                     afterBlock()
                 }
             }
@@ -306,7 +316,6 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
                     click(leave)
                     enterStep(Step.CONFIRM_LEAVE)
                 } else {
-                    // Blocking may have closed the drawer; reopen it
                     roots.firstNotNullOfOrNull { it.findByLabel(Labels.MENU) }?.let { click(it) }
                 }
             }
@@ -332,7 +341,7 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
                     markAction()
                     return
                 }
-                val chatTab = roots.firstNotNullOfOrNull { it.findByLabel(Labels.CHAT_TAB) }
+                val chatTab = roots.firstNotNullOfOrNull { it.findByLabel(Labels.CHAT_TAB, Match.PREFIX) }
                 if (chatTab != null) {
                     click(chatTab)
                     scanAtTop = false
@@ -382,12 +391,18 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
 
     /** Finds a visible chat list row whose last message preview is an ad. */
     private fun findAdRow(root: AccessibilityNodeInfo): AdRow? {
-        for (previewNode in root.findAll { it.isVisibleToUser && AdDetector.isAd(it.text) }) {
-            val preview = previewNode.text.toString()
+        // The preview is exposed as a content description; the row itself only has a combined description
+        val previews = root.findAll { node ->
+            node.isVisibleToUser && !node.isClickable && (AdDetector.isAd(node.text) || AdDetector.isAd(node.contentDescription))
+        }
+        for (previewNode in previews) {
+            val preview = (previewNode.contentDescription ?: previewNode.text).toString()
             var row: AccessibilityNodeInfo? = previewNode
             while (row != null && !row.isClickable) row = row.parent
             if (row == null) continue
-            val title = ChatListParser.findTitle(row.collectTexts(), preview) ?: continue
+            val title = row.find { it.viewIdResourceName?.endsWith(":id/name") == true }?.text?.toString()?.trim()
+                ?: ChatListParser.findTitle(row.collectTexts(), preview)
+                ?: continue
             if (title in scanSkipped) continue
             return AdRow(row, title, preview)
         }
@@ -475,13 +490,27 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         return roots.filter { it.packageName == KakaoAdBlockerService.KAKAO_PACKAGE }
     }
 
+    private fun scrollChatLogUp(roots: List<AccessibilityNodeInfo>): Boolean {
+        val chatLog = roots.firstNotNullOfOrNull { root ->
+            root.find { it.isScrollable && it.viewIdResourceName?.endsWith(":id/chat_log_recycler_list") == true }
+                ?: root.findChatList()
+        } ?: return false
+        markAction()
+        return chatLog.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+    }
+
     private fun click(node: AccessibilityNodeInfo) {
         markAction()
         lastClickedBounds = Rect().also { node.getBoundsInScreen(it) }
 
+        // Labels are often plain text inside a clickable row; only climb a few levels so we don't hit a container
         var target: AccessibilityNodeInfo? = node
-        while (target != null && !target.isClickable) target = target.parent
-        if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
+        var depth = 0
+        while (target != null && !target.isClickable && depth < MAX_CLICK_PARENT_DEPTH) {
+            target = target.parent
+            depth++
+        }
+        if (target?.isClickable == true && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return
 
         // Some custom views ignore ACTION_CLICK; tap the center of the label instead
         val bounds = lastClickedBounds ?: return
@@ -493,12 +522,15 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         )
     }
 
-    private fun AccessibilityNodeInfo.findByText(text: String): AccessibilityNodeInfo? =
-        find { it.text?.toString()?.trim() == text }
+    /** The chat room title is a content description in the chat room and a text in the chat list. */
+    private fun AccessibilityNodeInfo.findByTitle(title: String): AccessibilityNodeInfo? = find { node ->
+        node.isVisibleToUser &&
+            (node.text?.toString()?.trim() == title || node.contentDescription?.toString()?.trim() == title)
+    }
 
     private fun AccessibilityNodeInfo.findByLabel(
         labels: List<String>,
-        exact: Boolean = true,
+        match: Match = Match.EXACT,
         skipBounds: Rect? = null,
         excluding: String? = null
     ): AccessibilityNodeInfo? = find { node ->
@@ -507,7 +539,13 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         val nodeLabels = listOfNotNull(node.text?.toString()?.trim(), node.contentDescription?.toString()?.trim())
             .filter { excluding == null || !it.contains(excluding) }
         nodeLabels.any { label ->
-            labels.any { if (exact) label.equals(it, ignoreCase = true) else label.contains(it, ignoreCase = true) }
+            labels.any {
+                when (match) {
+                    Match.EXACT -> label.equals(it, ignoreCase = true)
+                    Match.PREFIX -> label.startsWith(it, ignoreCase = true)
+                    Match.CONTAINS -> label.contains(it, ignoreCase = true)
+                }
+            }
         }
     }
 
@@ -554,6 +592,8 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         private const val NEXT_TASK_DELAY_MS = 1_500L
         private const val MAX_SCAN_SCROLLS = 50
         private const val MAX_SCAN_TASKS = 100
+        private const val MAX_CHAT_SCROLLS = 30
+        private const val MAX_CLICK_PARENT_DEPTH = 3
 
         @Volatile
         var isRunning = false
