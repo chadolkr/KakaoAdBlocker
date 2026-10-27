@@ -36,4 +36,17 @@
     <string name="cleanup_status_partial">Left chat (block failed)</string>
     <string name="cleanup_status_not_channel">Skipped: not a channel</string>
     <string name="cleanup_status_failed">Cleanup failed</string>
+    <string name="button_scan_existing">Clean Up Existing Ad Chats</string>
+    <string name="scan_desc">Opens KakaoTalk and cleans up chats whose last message is an ad</string>
+    <string name="scan_started">Searching KakaoTalk for ad chats…</string>
+    <string name="scan_service_not_running">The accessibility service is not running. Turn it on in accessibility settings.</string>
+    <string name="scan_finished_format">Cleaned up %1$d ad chats</string>
+    <string name="guide_title">How to Enable Accessibility</string>
+    <string name="guide_intro">Android blocks accessibility for apps installed outside the Play Store until you allow restricted settings.</string>
+    <string name="guide_step1">In accessibility settings, open \'Installed apps\' (or \'Downloaded apps\') and try to turn on \'KakaoTalk Ad Chat Cleanup\'. If a \'Restricted setting\' notice appears, tap OK.</string>
+    <string name="guide_step2">In app info, tap ⋮ at the top right, choose \'Allow restricted settings\' and verify it\'s you. The menu appears only after step 1.</string>
+    <string name="guide_step3">Go back to accessibility settings and turn on the service.</string>
+    <string name="guide_open_accessibility">Open Accessibility Settings</string>
+    <string name="guide_open_app_info">Open App Info</string>
+    <string name="guide_close">Close</string>
 </resources>

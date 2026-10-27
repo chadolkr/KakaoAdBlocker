@@ -83,6 +83,9 @@ class MainScreenViewModel(private val repository: BlockLogRepository) : ViewMode
         }
     }
 
+    /** Returns false if the accessibility service is not running. */
+    fun requestScan(): Boolean = KakaoCleanupAccessibilityService.requestScan()
+
     fun checkServicePermission(context: Context) {
         viewModelScope.launch {
             val enabled = isNotificationServiceEnabled(context)

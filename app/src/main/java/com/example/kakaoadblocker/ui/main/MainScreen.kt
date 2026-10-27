@@ -2,7 +2,9 @@ package com.example.kakaoadblocker.ui.main
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -73,6 +75,30 @@ fun MainScreen(
     }
 
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var showAccessibilityGuide by remember { mutableStateOf(false) }
+
+    val openAccessibilitySettings = {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
+    }
+
+    if (showAccessibilityGuide) {
+        AccessibilityGuideDialog(
+            onOpenAccessibilitySettings = openAccessibilitySettings,
+            onOpenAppInfo = {
+                val intent = Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null)
+                ).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+            },
+            onDismiss = { showAccessibilityGuide = false }
+        )
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -105,10 +131,20 @@ fun MainScreen(
                     isAutoBlockChannelEnabled = successState.isAutoBlockChannelEnabled,
                     isAutoLeaveChatEnabled = successState.isAutoLeaveChatEnabled,
                     onOpenAccessibilitySettings = {
-                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        // Android 13+ blocks accessibility for sideloaded apps until "restricted settings" are allowed
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            showAccessibilityGuide = true
+                        } else {
+                            openAccessibilitySettings()
                         }
-                        context.startActivity(intent)
+                    },
+                    onStartScan = {
+                        val message = if (viewModel.requestScan()) {
+                            R.string.scan_started
+                        } else {
+                            R.string.scan_service_not_running
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                     },
                     onToggleAutoBlockChannel = { enabled -> viewModel.setAutoBlockChannelEnabled(enabled) },
                     onToggleAutoLeaveChat = { enabled -> viewModel.setAutoLeaveChatEnabled(enabled) },
@@ -151,7 +187,8 @@ internal fun MainContent(
     isAutoLeaveChatEnabled: Boolean = false,
     onOpenAccessibilitySettings: () -> Unit = {},
     onToggleAutoBlockChannel: (Boolean) -> Unit = {},
-    onToggleAutoLeaveChat: (Boolean) -> Unit = {}
+    onToggleAutoLeaveChat: (Boolean) -> Unit = {},
+    onStartScan: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -226,7 +263,8 @@ internal fun MainContent(
                 isAutoLeaveChatEnabled = isAutoLeaveChatEnabled,
                 onOpenAccessibilitySettings = onOpenAccessibilitySettings,
                 onToggleAutoBlockChannel = onToggleAutoBlockChannel,
-                onToggleAutoLeaveChat = onToggleAutoLeaveChat
+                onToggleAutoLeaveChat = onToggleAutoLeaveChat,
+                onStartScan = onStartScan
             )
         }
 
@@ -476,7 +514,8 @@ fun CleanupCard(
     isAutoLeaveChatEnabled: Boolean,
     onOpenAccessibilitySettings: () -> Unit,
     onToggleAutoBlockChannel: (Boolean) -> Unit,
-    onToggleAutoLeaveChat: (Boolean) -> Unit
+    onToggleAutoLeaveChat: (Boolean) -> Unit,
+    onStartScan: () -> Unit
 ) {
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -516,6 +555,26 @@ fun CleanupCard(
                     checked = isAutoLeaveChatEnabled,
                     onCheckedChange = onToggleAutoLeaveChat
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = onStartScan,
+                    enabled = isAutoBlockChannelEnabled || isAutoLeaveChatEnabled,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFEB3B)),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.button_scan_existing),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+                Text(
+                    text = stringResource(id = R.string.scan_desc),
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
             } else {
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
@@ -531,6 +590,79 @@ fun CleanupCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun AccessibilityGuideDialog(
+    onOpenAccessibilitySettings: () -> Unit,
+    onOpenAppInfo: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1C1C24),
+        titleContentColor = Color.White,
+        textContentColor = Color(0xFFE0E0E0),
+        title = { Text(text = stringResource(id = R.string.guide_title), fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(text = stringResource(id = R.string.guide_intro), fontSize = 13.sp, color = Color.Gray)
+                GuideStep(
+                    number = 1,
+                    text = stringResource(id = R.string.guide_step1),
+                    buttonLabel = stringResource(id = R.string.guide_open_accessibility),
+                    onClick = onOpenAccessibilitySettings
+                )
+                GuideStep(
+                    number = 2,
+                    text = stringResource(id = R.string.guide_step2),
+                    buttonLabel = stringResource(id = R.string.guide_open_app_info),
+                    onClick = onOpenAppInfo
+                )
+                GuideStep(
+                    number = 3,
+                    text = stringResource(id = R.string.guide_step3),
+                    buttonLabel = stringResource(id = R.string.guide_open_accessibility),
+                    onClick = onOpenAccessibilitySettings
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(id = R.string.guide_close), color = Color(0xFFFFEB3B))
+            }
+        }
+    )
+}
+
+@Composable
+private fun GuideStep(
+    number: Int,
+    text: String,
+    buttonLabel: String,
+    onClick: () -> Unit
+) {
+    Column {
+        Row {
+            Text(
+                text = "$number.",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFFEB3B),
+                modifier = Modifier.width(20.dp)
+            )
+            Text(text = text, fontSize = 14.sp, color = Color(0xFFE0E0E0))
+        }
+        OutlinedButton(
+            onClick = onClick,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFEB3B)),
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            modifier = Modifier.padding(start = 20.dp, top = 4.dp)
+        ) {
+            Text(text = buttonLabel, fontSize = 12.sp)
         }
     }
 }
