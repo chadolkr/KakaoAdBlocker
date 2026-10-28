@@ -37,7 +37,7 @@
     <string name="cleanup_status_not_channel">Skipped: not a channel</string>
     <string name="cleanup_status_failed">Cleanup failed</string>
     <string name="button_scan_existing">Clean Up Existing Ad Chats</string>
-    <string name="scan_desc">Opens KakaoTalk and cleans up chats whose last message is an ad</string>
+    <string name="scan_desc">Finds ads in KakaoTalk channel chats, including already read ones, and cleans them up (chats with unread messages are skipped)</string>
     <string name="scan_started">Searching KakaoTalk for ad chats…</string>
     <string name="scan_service_not_running">The accessibility service is not running. Turn it on in accessibility settings.</string>
     <string name="scan_finished_format">Cleaned up %1$d ad chats</string>

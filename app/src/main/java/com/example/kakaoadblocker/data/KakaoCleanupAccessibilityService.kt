@@ -33,8 +33,9 @@ import java.lang.ref.WeakReference
  * Flow: open chat → verify it is a channel chat → block via the channel notice → leave via the menu.
  * Labels were taken from KakaoTalk 26.9.1 (Android 17); chat titles and previews live in content descriptions.
  *
- * Scan mode (requested from the app) cleans up ad chats received before the feature was enabled:
- * open the chat list → find a row whose preview is an ad → run the flow above → back to the list top → repeat.
+ * Scan mode (requested from the app) cleans up ad chats received before the feature was enabled, including ads
+ * that were already read and are no longer the last message: open the chat list → open each chat (rows whose
+ * preview is an ad first) → verify it is a channel chat → search its messages for an ad → run the flow above → repeat.
  */
 class KakaoCleanupAccessibilityService : AccessibilityService() {
 
@@ -51,6 +52,8 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         val CONFIRM_BLOCK = listOf("차단", "Block")
         val LEAVE = listOf("채팅방 나가기", "Leave chat")
         val CONFIRM_LEAVE = listOf("나가기", "Leave")
+        // Unread badge descriptions in the chat list; opening such a chat would mark it as read
+        val UNREAD = listOf("안 읽은", "읽지 않은", "unread")
     }
 
     private enum class Match { EXACT, PREFIX, CONTAINS }
@@ -60,6 +63,7 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         SCAN(6_000),
         OPEN_CHAT(8_000),
         VERIFY_CHANNEL(3_000),
+        FIND_AD(4_000),
         BLOCK(3_000),
         CONFIRM_BLOCK(3_000),
         LEAVE(4_000),
@@ -75,7 +79,7 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
     private var lastActionAt = 0L
     private var lastClickedBounds: Rect? = null
     private var blockFailed = false
-    private var blockScrolls = 0
+    private var chatScrolls = 0
     private var autoBlock = false
     private var autoLeave = false
 
@@ -84,8 +88,8 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
     private var scanAtTop = false
     private var scanScrolls = 0
     private var scanCleaned = 0
-    // Chats that must not be picked again in this scan (not a channel, failed, or kept after block-only)
-    private val scanSkipped = mutableSetOf<String>()
+    // Chats already opened in this scan; they are never picked again
+    private val scanVisited = mutableSetOf<String>()
 
     private val isBusy get() = task != null || scanning
 
@@ -136,7 +140,7 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         handler.removeCallbacksAndMessages(null)
         runCatching { unregisterReceiver(userPresentReceiver) }
         // Nobody will process these anymore
-        task?.let { repository.updateCleanupStatus(it.logId, CleanupStatus.FAILED) }
+        task?.takeIf { it.logId.isNotEmpty() }?.let { repository.updateCleanupStatus(it.logId, CleanupStatus.FAILED) }
         task = null
         CleanupQueue.drain().forEach { repository.updateCleanupStatus(it.logId, CleanupStatus.FAILED) }
     }
@@ -196,7 +200,9 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         Log.d(TAG, "Scanning chat list (block=$autoBlock, leave=$autoLeave)")
         scanning = true
         scanCleaned = 0
-        scanSkipped.clear()
+        scanVisited.clear()
+        scanAtTop = false
+        scanScrolls = 0
         if (!launchKakao()) {
             endScan()
             return
@@ -273,7 +279,7 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
                     roots.any { it.findByTitle(current.chatTitle) != null } &&
                     roots.any { it.findByLabel(Labels.MENU) != null }
                 ) {
-                    blockScrolls = 0
+                    chatScrolls = 0
                     enterStep(Step.VERIFY_CHANNEL)
                 } else if (onChatList) {
                     // Fallback path: open the chat room from the list by its title
@@ -286,7 +292,29 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
                     root.findByLabel(Labels.CHANNEL_HINTS, Match.CONTAINS, excluding = current.chatTitle)
                 }
                 if (channelHint != null) {
-                    enterStep(if (autoBlock) Step.BLOCK else Step.LEAVE)
+                    // Scan tasks have no log yet: the ad may be anywhere in the chat, not just the last message
+                    if (current.logId.isEmpty()) enterStep(Step.FIND_AD) else enterCleanupStep()
+                }
+            }
+            Step.FIND_AD -> {
+                val ad = roots.firstNotNullOfOrNull { root ->
+                    root.find { it.isVisibleToUser && (AdDetector.isAd(it.text) || AdDetector.isAd(it.contentDescription)) }
+                }
+                when {
+                    ad != null -> {
+                        val adText = (ad.text?.takeIf { AdDetector.isAd(it) } ?: ad.contentDescription).toString()
+                        Log.d(TAG, "Found an ad in chat '${current.chatTitle}'")
+                        task = current.copy(logId = repository.addLog(current.chatTitle, adText, CleanupStatus.PENDING))
+                        chatScrolls = 0
+                        enterCleanupStep()
+                    }
+                    // The block notice sits above the first message, so the whole chat was checked
+                    roots.any { it.findByLabel(Labels.BLOCK_NOTICE, Match.CONTAINS) != null } -> skipChat()
+                    chatScrolls < MAX_CHAT_SCROLLS && scrollChatLogUp(roots) -> {
+                        chatScrolls++
+                        enterStep(Step.FIND_AD)
+                    }
+                    else -> skipChat()
                 }
             }
             Step.BLOCK -> {
@@ -294,9 +322,9 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
                 if (notice != null) {
                     click(notice)
                     enterStep(Step.CONFIRM_BLOCK)
-                } else if (blockScrolls < MAX_CHAT_SCROLLS && scrollChatLogUp(roots)) {
+                } else if (chatScrolls < MAX_CHAT_SCROLLS && scrollChatLogUp(roots)) {
                     // The notice sits above the first message; scroll up to reveal it
-                    blockScrolls++
+                    chatScrolls++
                     enterStep(Step.BLOCK)
                 }
             }
@@ -343,9 +371,8 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
                 }
                 val chatTab = roots.firstNotNullOfOrNull { it.findByLabel(Labels.CHAT_TAB, Match.PREFIX) }
                 if (chatTab != null) {
-                    click(chatTab)
-                    scanAtTop = false
-                    scanScrolls = 0
+                    // Tapping the selected tab may jump to the top; stay put to continue below the visited rows
+                    if (chatTab.isSelectedTab()) markAction() else click(chatTab)
                     enterStep(Step.SCAN)
                 } else {
                     // Still inside a chat room or its drawer
@@ -355,7 +382,7 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
             }
             Step.SCAN -> {
                 val list = roots.firstNotNullOfOrNull { it.findChatList() }
-                // Rows shift after leaving a chat, so always restart from the top
+                // Start from the top once; visited chats are skipped by title, so shifting rows don't matter
                 if (!scanAtTop) {
                     if (scanScrolls < MAX_SCAN_SCROLLS &&
                         list?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) == true
@@ -368,7 +395,7 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
                     scanAtTop = true
                     scanScrolls = 0
                 }
-                val hit = roots.firstNotNullOfOrNull { findAdRow(it) }
+                val hit = roots.firstNotNullOfOrNull { findNextRow(it) }
                 if (hit != null) {
                     startScanTask(hit)
                     return
@@ -387,10 +414,28 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         }
     }
 
-    private class AdRow(val row: AccessibilityNodeInfo, val title: String, val preview: String)
+    /** A chat list row to open; [adPreview] is set when its last message preview is already known to be an ad. */
+    private class ScanRow(val row: AccessibilityNodeInfo, val title: String, val adPreview: String?)
+
+    /** Picks the next chat to check: rows whose preview is an ad first, then any other unvisited chat. */
+    private fun findNextRow(root: AccessibilityNodeInfo): ScanRow? {
+        findAdRow(root)?.let { return it }
+        val list = root.findChatList() ?: return null
+        // Rows without a chat name (e.g. the ad banner above the list) are never opened
+        val names = list.findAll { it.isVisibleToUser && it.viewIdResourceName?.endsWith(":id/name") == true }
+        for (nameNode in names) {
+            val title = nameNode.text?.toString()?.trim().orEmpty()
+            if (title.isEmpty() || title in scanVisited) continue
+            var row: AccessibilityNodeInfo? = nameNode
+            while (row != null && !row.isClickable) row = row.parent
+            if (row == null || row.hasUnread()) continue
+            return ScanRow(row, title, null)
+        }
+        return null
+    }
 
     /** Finds a visible chat list row whose last message preview is an ad. */
-    private fun findAdRow(root: AccessibilityNodeInfo): AdRow? {
+    private fun findAdRow(root: AccessibilityNodeInfo): ScanRow? {
         // The preview is exposed as a content description; the row itself only has a combined description
         val previews = root.findAll { node ->
             node.isVisibleToUser && !node.isClickable && (AdDetector.isAd(node.text) || AdDetector.isAd(node.contentDescription))
@@ -403,19 +448,21 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
             val title = row.find { it.viewIdResourceName?.endsWith(":id/name") == true }?.text?.toString()?.trim()
                 ?: ChatListParser.findTitle(row.collectTexts(), preview)
                 ?: continue
-            if (title in scanSkipped) continue
-            return AdRow(row, title, preview)
+            if (title in scanVisited) continue
+            return ScanRow(row, title, preview)
         }
         return null
     }
 
-    private fun startScanTask(hit: AdRow) {
-        if (scanCleaned + scanSkipped.size >= MAX_SCAN_TASKS) {
+    private fun startScanTask(hit: ScanRow) {
+        if (scanVisited.size >= MAX_SCAN_TASKS) {
             endScan()
             return
         }
-        Log.d(TAG, "Found ad chat '${hit.title}' in the chat list")
-        val logId = repository.addLog(hit.title, hit.preview, CleanupStatus.PENDING)
+        scanVisited.add(hit.title)
+        Log.d(TAG, "Checking chat '${hit.title}' (ad preview: ${hit.adPreview != null})")
+        // Without an ad preview the log is created in FIND_AD, once an ad is found in the chat
+        val logId = hit.adPreview?.let { repository.addLog(hit.title, it, CleanupStatus.PENDING) } ?: ""
         task = CleanupTask(hit.title, logId, null)
         blockFailed = false
         lastClickedBounds = null
@@ -444,6 +491,16 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun enterCleanupStep() {
+        enterStep(if (autoBlock) Step.BLOCK else Step.LEAVE)
+    }
+
+    /** Leaves a chat untouched (no ad found) and moves on. */
+    private fun skipChat() {
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        finish(CleanupStatus.NONE)
+    }
+
     private fun afterBlock() {
         if (autoLeave) {
             enterStep(Step.LEAVE)
@@ -465,13 +522,10 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
     private fun finish(status: CleanupStatus) {
         val finished = task ?: return
         Log.d(TAG, "Cleanup of '${finished.chatTitle}' finished: $status")
-        repository.updateCleanupStatus(finished.logId, status)
+        if (finished.logId.isNotEmpty()) repository.updateCleanupStatus(finished.logId, status)
         task = null
         if (scanning) {
-            val cleaned = status == CleanupStatus.DONE || status == CleanupStatus.PARTIAL
-            if (cleaned) scanCleaned++
-            // A block-only cleanup keeps the chat (and its ad preview) in the list
-            if (!cleaned || !autoLeave) scanSkipped.add(finished.chatTitle)
+            if (status == CleanupStatus.DONE || status == CleanupStatus.PARTIAL) scanCleaned++
             markAction()
             enterStep(Step.SCAN_OPEN_LIST)
             return
@@ -521,6 +575,16 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
             null
         )
     }
+
+    /** Opening a chat marks it as read, so chats with unread messages are left alone unless their preview is an ad. */
+    private fun AccessibilityNodeInfo.hasUnread(): Boolean = find { node ->
+        (node.isVisibleToUser && node.viewIdResourceName?.contains("unread", ignoreCase = true) == true) ||
+            Labels.UNREAD.any { node.contentDescription?.contains(it, ignoreCase = true) == true }
+    } != null
+
+    /** The selected state may be reported on the label itself or on its clickable tab container. */
+    private fun AccessibilityNodeInfo.isSelectedTab(): Boolean =
+        generateSequence(this) { it.parent }.take(MAX_CLICK_PARENT_DEPTH + 1).any { it.isSelected }
 
     /** The chat room title is a content description in the chat room and a text in the chat list. */
     private fun AccessibilityNodeInfo.findByTitle(title: String): AccessibilityNodeInfo? = find { node ->
@@ -590,9 +654,9 @@ class KakaoCleanupAccessibilityService : AccessibilityService() {
         private const val TICK_MS = 400L
         private const val SETTLE_MS = 700L
         private const val NEXT_TASK_DELAY_MS = 1_500L
-        private const val MAX_SCAN_SCROLLS = 50
-        private const val MAX_SCAN_TASKS = 100
-        private const val MAX_CHAT_SCROLLS = 30
+        private const val MAX_SCAN_SCROLLS = 200
+        private const val MAX_SCAN_TASKS = 300
+        private const val MAX_CHAT_SCROLLS = 50
         private const val MAX_CLICK_PARENT_DEPTH = 3
 
         @Volatile

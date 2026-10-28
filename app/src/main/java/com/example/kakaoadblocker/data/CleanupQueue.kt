@@ -2,7 +2,10 @@ package com.example.kakaoadblocker.data
 
 import android.app.PendingIntent
 
-/** A chat room that should be cleaned up (channel blocked and/or chat left) after an ad was detected. */
+/**
+ * A chat room that should be cleaned up (channel blocked and/or chat left) after an ad was detected.
+ * [logId] is empty for a chat list scan task until an ad is found in the chat.
+ */
 data class CleanupTask(
     val chatTitle: String,
     val logId: String,
